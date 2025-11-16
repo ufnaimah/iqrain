@@ -189,6 +189,10 @@ Route::middleware(['auth:sanctum', 'verified'])->group(function () {
 });
 
 // memory card game 
-    Route::get('game', function(){
-        return view('game'); 
+    Route::get('memoryCard', function(){
+        return view('memoryCard'); 
     }); 
+
+    use App\Http\Controllers\LeaderboardController;
+
+Route::get('/leaderboard', [LeaderboardController::class, 'index'])->name('leaderboard.index');
