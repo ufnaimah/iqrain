@@ -7,6 +7,7 @@ use App\Models\TingkatanIqra;
 use App\Models\JenisGame;
 use App\Models\HasilGame;
 use App\Models\Leaderboard;
+use App\Models\Murid;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -43,17 +44,111 @@ class GameController extends Controller
         return view('pages.murid.games.tracing', compact('tingkatan', 'materiPembelajarans', 'gameStatic'));
     }
 
+    // ==================================================================
+    // FUNGSI LABIRIN (UPDATE: Map & Latin)
+    // ==================================================================
     public function labirin($tingkatan_id)
     {
-        $tingkatan = TingkatanIqra::with('materiPembelajarans')->findOrFail($tingkatan_id);
+        $tingkatan = TingkatanIqra::findOrFail($tingkatan_id);
         $gameStatic = GameStatic::where('tingkatan_id', $tingkatan_id)
             ->whereHas('jenisGame', function ($q) {
                 $q->where('nama_game', 'Labirin');
             })->first();
 
-        $materiPembelajarans = $tingkatan->materiPembelajarans;
+        // 1. Definisikan 3 map labirin (ukuran 8 baris x 9 kolom)
+        $maps = [
+            // Map 1
+            [
+                [0, 1, 1, 1, 0, 0, 0, 0, 1],
+                [0, 0, 0, 1, 0, 1, 1, 0, 1],
+                [0, 1, 0, 0, 0, 1, 0, 0, 0],
+                [0, 1, 1, 0, 1, 1, 0, 1, 0],
+                [0, 0, 0, 0, 1, 0, 0, 1, 0],
+                [0, 1, 1, 0, 0, 0, 1, 1, 0],
+                [0, 0, 1, 0, 1, 0, 0, 0, 1],
+                [0, 0, 1, 0, 0, 1, 0, 0, 0],
+            ],
+            // Map 2
+            [
+                [0, 0, 0, 1, 1, 1, 0, 0, 1],
+                [1, 1, 0, 1, 0, 0, 0, 1, 0],
+                [0, 0, 0, 1, 0, 1, 0, 1, 0],
+                [0, 1, 0, 0, 0, 1, 0, 0, 0],
+                [0, 1, 1, 1, 1, 1, 0, 1, 1],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [1, 1, 0, 1, 1, 0, 1, 0, 0],
+                [0, 0, 0, 1, 0, 0, 1, 0, 1],
+            ],
+            // Map 3
+            [
+                [0, 1, 0, 0, 0, 1, 1, 0, 1],
+                [0, 1, 0, 1, 0, 0, 0, 0, 0],
+                [0, 0, 0, 1, 0, 1, 1, 0, 0],
+                [0, 1, 0, 1, 0, 1, 0, 0, 0],
+                [0, 1, 0, 0, 0, 1, 0, 1, 1],
+                [0, 1, 1, 1, 1, 1, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 1, 1],
+                [1, 1, 1, 0, 1, 0, 0, 0, 0],
+            ],
+        ];
 
-        return view('pages.murid.games.labirin', compact('tingkatan', 'materiPembelajarans', 'gameStatic'));
+        // 2. Pilih 1 map secara acak
+        $selectedMap = $maps[array_rand($maps)];
+
+        // 3. Definisikan mapping huruf hijaiyah ke nama file
+        $hijaiyahMap = [
+            'ا' => 'Alif.webp',
+            'ب' => 'Ba.webp',
+            'ت' => 'Ta.webp',
+            'ث' => 'tsa.webp',
+            'ج' => 'Jim.webp',
+            'ح' => 'Kha.webp',
+            'خ' => 'Kho.webp',
+            'د' => 'Dal.webp',
+            'ذ' => 'Dzal.webp',
+            'ر' => 'Ra.webp',
+            'ز' => 'Zai.webp',
+            'س' => 'Sin.webp',
+            'ش' => 'Syin.webp',
+            'ص' => 'Shod.webp',
+            'ض' => 'Dhod.webp',
+            'ط' => 'Tho.webp',
+            'ظ' => 'Dhlo.webp',
+            'ع' => 'Ain.webp',
+            'غ' => 'Ghoin.webp',
+            'ف' => 'Fa.webp',
+            'ق' => 'Qof.webp',
+            'ك' => 'Kaf.webp',
+            'ل' => 'Lam.webp',
+            'م' => 'Mim.webp',
+            'ن' => 'Nun.webp',
+            'و' => 'Wawu.webp',
+            'ي' => 'Ya.webp'
+        ];
+
+        // 4. Ambil 4 huruf acak
+        $randomLetters = array_rand($hijaiyahMap, 4);
+
+        // 5. Buat array nama file DAN array nama latin
+        $targetFiles = [];
+        $targetNames = [];
+        foreach ($randomLetters as $letter) {
+            $fileName = $hijaiyahMap[$letter];
+            $targetFiles[] = $fileName;
+
+            $nameOnly = pathinfo($fileName, PATHINFO_FILENAME);
+            $capitalizedName = ucfirst($nameOnly);
+            $targetNames[] = $capitalizedName;
+        }
+
+        // 6. Kirim data ke View Blade
+        return view('pages.murid.games.labirin', [
+            'tingkatan' => $tingkatan,
+            'gameStatic' => $gameStatic,
+            'mapLayout' => $selectedMap,
+            'targetLetters' => $targetNames,
+            'targetFiles' => $targetFiles,
+        ]);
     }
 
     public function dragDrop($tingkatan_id)
@@ -65,17 +160,35 @@ class GameController extends Controller
         return view('pages.murid.games.drag-drop', compact('tingkatan', 'jenisGame'));
     }
 
+    // ==================================================================
+    // FUNGSI SAVE SCORE (UPDATE: Keamanan Max 100 Poin)
+    // ==================================================================
     public function saveScore(Request $request)
     {
+        // 1. Validasi Input
         $request->validate([
             'jenis_game_id' => 'required|exists:jenis_games,jenis_game_id',
             'skor' => 'required|integer|min:0',
-            'total_poin' => 'required|integer|min:0',
         ]);
 
         $murid = Auth::user()->murid;
 
-        // Save hasil game
+        // 2. Ambil Info Game untuk Cek Poin Maksimal dari Database
+        // Mengambil data JenisGame untuk mengetahui batas maksimal poin (biasanya 100)
+        $jenisGame = JenisGame::findOrFail($request->jenis_game_id);
+        $poinMaksimal = $jenisGame->poin_maksimal;
+
+        // 3. Logika Pembatasan Skor (Server-Side Security)
+        // Jika skor yang dikirim user > poin maksimal database, paksa jadi poin maksimal
+        $inputSkor = $request->skor;
+
+        if ($inputSkor > $poinMaksimal) {
+            $finalScore = $poinMaksimal;
+        } else {
+            $finalScore = $inputSkor;
+        }
+
+        // 4. Simpan Hasil Game ke Tabel hasil_games
         $hasilGame = HasilGame::create([
             'murid_id' => $murid->murid_id,
             'jenis_game_id' => $request->jenis_game_id,
@@ -85,23 +198,26 @@ class GameController extends Controller
             'dimainkan_at' => now(),
         ]);
 
-        // Update leaderboard
+        // 5. Update Leaderboard
         $this->updateLeaderboard($murid->murid_id);
 
         return response()->json([
             'success' => true,
-            'hasil_game_id' => $hasilGame->hasil_game_id
+            'hasil_game_id' => $hasilGame->hasil_game_id,
+            'poin_didapat' => $finalScore
         ]);
     }
 
+    // ==================================================================
+    // FUNGSI LEADERBOARD (TIDAK BERUBAH)
+    // ==================================================================
     private function updateLeaderboard($murid_id)
     {
-        // Calculate total points from all games
         $totalPoin = HasilGame::where('murid_id', $murid_id)->sum('total_poin');
 
-        $murid = \App\Models\Murid::find($murid_id);
+        $murid = Murid::find($murid_id);
 
-        // Update global leaderboard
+        // Update leaderboard global
         Leaderboard::updateOrCreate(
             [
                 'murid_id' => $murid_id,
@@ -114,7 +230,7 @@ class GameController extends Controller
             ]
         );
 
-        // Update mentor leaderboard if murid has mentor
+        // Update leaderboard mentor jika ada
         if ($murid->mentor_id) {
             Leaderboard::updateOrCreate(
                 [
@@ -129,13 +245,12 @@ class GameController extends Controller
             );
         }
 
-        // Recalculate rankings
         $this->recalculateRankings();
     }
 
     private function recalculateRankings()
     {
-        // Global rankings
+        // Global
         $globalLeaderboards = Leaderboard::whereNull('mentor_id')
             ->orderByDesc('total_poin_semua_game')
             ->get();
@@ -144,7 +259,7 @@ class GameController extends Controller
             $leaderboard->update(['ranking_global' => $index + 1]);
         }
 
-        // Mentor-specific rankings
+        // Mentor
         $mentors = Leaderboard::whereNotNull('mentor_id')
             ->distinct('mentor_id')
             ->pluck('mentor_id');
