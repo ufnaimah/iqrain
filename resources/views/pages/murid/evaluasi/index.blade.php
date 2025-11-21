@@ -48,24 +48,38 @@
         <!-- Leaderboard Content -->
         <div id="content-leaderboard" class="tab-content flex justify-center items-center">
             <div class="bg-white rounded-3xl shadow-2xl" style="width: 800px; height: 900px; overflow: hidden; display: flex; flex-direction: column;">
-                        
+                   
+                {{-- Tombol lokal dan global --}}
                 <div class="flex justify-end mb-4 px-6 pt-6 flex-shrink-0">
-                    <select onchange="changeLeaderboardType(this.value)" 
-                            class="bg-blue-500 text-white px-6 py-2 rounded-full font-semibold cursor-pointer">
-                        <option value="global" {{ $leaderboardType === 'global' ? 'selected' : '' }}>
-                            Global
-                        </option>
-                        <option value="mentor" {{ $leaderboardType === 'mentor' ? 'selected' : '' }}>
-                            Mentor
-                        </option>
-                    </select>
-                </div>        
-                
-                @if($leaderboards->count() >= 3)
-                    {{-- 
-                    LANGKAH "RAPI":
-                    Kita definisikan variabel dulu di sini agar HTML di bawah lebih bersih.
-                    --}}
+                    <div class="relative inline-block text-left">
+                        
+                        <select onchange="changeLeaderboardType(this.value)" 
+                                class="appearance-none w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 pl-6 pr-12 rounded-full shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 transition-all duration-300 cursor-pointer border border-blue-500">
+                            
+                            <option value="global" class="bg-white text-gray-800 py-2" {{ $leaderboardType === 'global' ? 'selected' : '' }}>
+                                Global Rank
+                            </option>
+                            
+                            <option value="mentor" class="bg-white text-gray-800 py-2" {{ $leaderboardType === 'mentor' ? 'selected' : '' }}>
+                                Mentor Rank
+                            </option>
+
+                        </select>
+
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-white">
+                            <svg class="h-5 w-5 transform group-hover:rotate-180 transition-transform duration-200" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+
+                    </div>
+                </div>
+
+                @php
+                    $cukupBuatPodium = $leaderboards->count() >= 3;
+                @endphp
+                                
+                @if($cukupBuatPodium)                     
                     @php
                         $rank1 = $leaderboards[0];
                         $rank2 = $leaderboards[1];
@@ -74,7 +88,8 @@
 
                     <div class="flex items-end justify-center gap-4 mb-6 px-4 flex-shrink-0">
                         
-                        <!-- Rank 2 -->
+                        {{-- Bagian Podium --}}
+                        {{-- Rank 2 --}}
                         <div class="text-center pb-0" style="width: 160px;">                    
                             <img src="{{ asset('images/maskot/ceria.webp') }}"
                                 alt="{{ $rank2->murid->user->username ?? 'Murid 2' }}"
@@ -109,7 +124,7 @@
                             </div>
                         </div>
 
-                        <!-- Rank 3 -->
+                        {{-- Rank 3 --}}
                         <div class="text-center pb-0" style="width: 160px;">
                             <img src="{{ asset('images/maskot/ceria.webp') }}"
                                 alt="{{ $rank3->murid->user->username ?? 'Murid 3' }}"
@@ -125,26 +140,33 @@
                 @endif
                 
                 <div class="flex-1 min-h-0 overflow-y-auto space-y-2 px-6">
-                    @forelse($leaderboards->skip(3) as $index => $leaderboard)
-                    <div class="flex items-center justify-between bg-gray-50 rounded-2xl p-3 hover:bg-gray-100 transition-colors">
-                        <div class="flex items-center gap-3">
-                            <div class="text-xl font-bold text-gray-400 w-10 text-center">
-                                
-                                {{ sprintf('%02d', $leaderboard->ranking_global) }}
-                            </div>
-                                                       
-                            <img src="{{ asset('images/maskot/ceria.webp') }}"
-                                alt="{{ $leaderboard->murid->user->username ?? 'Murid' }}"
-                                class="bg-blue-100 rounded-full w-10 h-10 object-cover border-2 border-blue-200">
+                    @php
+                        // Kalau podium tampil, list mulai dari orang ke-4 (skip 3).
+                        // Kalau podium TIDAK tampil (cuma 1-2 orang), list tampilkan SEMUA (skip 0).
+                        $listItems = $cukupBuatPodium ? $leaderboards->skip(3) : $leaderboards;
+                    @endphp
 
-                            <p class="font-cursive-iwk text-gray-700 truncate text-2xl lowercase">{{ $leaderboard->murid->user->username ?? 'Murid' }}</p>
+                    @forelse($listItems as $leaderboard)
+
+                        <div class="flex items-center justify-between bg-gray-50 rounded-2xl p-3 hover:bg-gray-100 transition-colors">
+                            <div class="flex items-center gap-3">
+                                <div class="text-xl font-bold text-gray-400 w-10 text-center">
+                                    
+                                    {{ sprintf('%02d', $leaderboard->ranking_display) }}
+                                </div>
+                                                        
+                                <img src="{{ asset('images/maskot/ceria.webp') }}"
+                                    alt="{{ $leaderboard->murid->user->username ?? 'Murid' }}"
+                                    class="bg-blue-100 rounded-full w-10 h-10 object-cover border-2 border-blue-200">
+
+                                <p class="font-cursive-iwk text-gray-700 truncate text-2xl lowercase">{{ $leaderboard->murid->user->username ?? 'Murid' }}</p>
+                            </div>
+                            <p class="text-lg font-bold text-pink-500">{{ $leaderboard->total_poin_semua_game }}</p>
                         </div>
-                        <p class="text-lg font-bold text-pink-500">{{ $leaderboard->total_poin_semua_game }}</p>
-                    </div>
-                    @empty
-                    <div class="font-cursive-iwk text-lg text-center text-gray-500 py-8">
-                        Belum ada peringkat lainnya
-                    </div>
+                        @empty
+                        <div class="font-cursive-iwk text-lg text-center text-gray-500 py-8">
+                            Belum ada peringkat lainnya
+                        </div>
                     @endforelse
                 </div>
                 
@@ -153,7 +175,7 @@
                     <p class="font-cursive-iwk text-2xl text-center font-bold text-gray-700">
                         Peringkatmu: 
                         <span class="text-2xl text-pink-500">
-                            #{{ $leaderboardType === 'mentor' ? $myRanking->ranking_mentor : $myRanking->ranking_global }}
+                            #{{ $myRanking->ranking_display }}
                         </span>
                         dengan skor <span class="text-pink-500">{{ $myRanking->total_poin_semua_game }}</span> poin
                     </p>

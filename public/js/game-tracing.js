@@ -1534,8 +1534,7 @@ function showSuccessScreen() {
     }
     if (backButton) {
         backButton.disabled = true; // Nonaktifkan tombol Kembali saat proses save
-    }
-    saveTracingScore();
+    }    
 
     modal.style.display = 'flex';
 
@@ -1579,68 +1578,69 @@ function calculateAccuracy(strokesDone, totalStrokes) {
 
 // Tambahkan fungsi ini di dalam script di tracing.blade.php atau di public/js/game-tracing.js
 
-async function saveTracingScore() {
-    const tingkatanId = document.getElementById('back-to-menu-button').getAttribute('data-tingkatan-id');
-    const skor = window.gameFinalScore; 
-    const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+// --- 1. AMBIL DATA SUNTIKAN ---
+// Kalau gak ada suntikan (misal test lokal), pakai default null/array kosong
+const jenisGameId = (typeof JENIS_GAME_ID !== 'undefined') ? JENIS_GAME_ID : null;
+const tingkatanId = (typeof TINGKATAN_ID !== 'undefined') ? TINGKATAN_ID : null;
+const saveScoreUrl = (typeof SAVE_SCORE_URL !== 'undefined') ? SAVE_SCORE_URL : '/game/save-score';
+const redirectUrl = (typeof REDIRECT_URL !== 'undefined') ? REDIRECT_URL : '/';
 
+// ... (Kode inisialisasi game, variabel gameState, dll TETAP SAMA) ...
+
+
+// --- 2. UPDATE FUNGSI SAVE SCORE ---
+async function saveTracingScore() {
+    // Ambil skor dari variabel global window yang di-set saat showSuccessScreen
+    const skor = window.gameFinalScore || 0; 
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
     const saveStatusElement = document.getElementById('save-status');
     const backButton = document.getElementById('back-to-menu-button');
-    // Set status loading awal
-    saveStatusElement.innerText = 'Menyimpan skor...';
-    saveStatusElement.classList.remove('text-green-600', 'text-red-600');
-    saveStatusElement.classList.add('text-yellow-600');
-    backButton.disabled = true;
 
-    // Safety check
-    if (skor === undefined || skor === null || !tingkatanId) {
-        saveStatusElement.innerText = 'Gagal: Skor tidak valid.';
-        saveStatusElement.classList.remove('text-yellow-600');
-        saveStatusElement.classList.add('text-red-600');
-        backButton.disabled = false;
-        console.error('Data skor atau tingkatan tidak lengkap.');
-        return;
+    // Update UI
+    if (saveStatusElement) {
+        saveStatusElement.innerText = 'Menyimpan skor...';
+        saveStatusElement.classList.remove('text-green-600', 'text-red-600');
+        saveStatusElement.classList.add('text-yellow-600');
     }
+    if (backButton) backButton.disabled = true;
 
-    const dataToSend = {
-        tingkatan_id: tingkatanId,
-        skor: skor,
-        _token: csrfToken 
-    };
-    
-    fetch(`/murid/games/${tingkatanId}/tracing/save`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRF-TOKEN': csrfToken, 
-        },
-        body: JSON.stringify(dataToSend)
-    })
-    .then(response => {
-        if (!response.ok) {
-            // Tangkap error HTTP (misal 422, 500)
-            return response.json().then(errorData => {
-                 throw new Error(errorData.message || errorData.error || `Error Status: ${response.status}`);
-            });
+    try {
+        // Fetch ke URL yang benar
+        const response = await fetch('/murid/game/save-score', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            body: JSON.stringify({
+                jenis_game_id: jenisGameId,
+                // Hapus game_static_id
+                skor: skor,        // Skor akurasi (0-100)
+                total_poin: skor   // Total poin sama dengan skor akurasi
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            if (saveStatusElement) {
+                saveStatusElement.innerText = `Skor ${skor}% berhasil disimpan!`;
+                saveStatusElement.classList.remove('text-yellow-600');
+                saveStatusElement.classList.add('text-green-600');
+            }
+            // Redirect setelah sukses (opsional, atau biarkan user klik tombol kembali)
+            // window.location.href = redirectUrl; 
+        } else {
+            throw new Error('Gagal menyimpan data.');
         }
-        return response.json();
-    })
-    .then(data => {
-        // SUKSES
-        saveStatusElement.innerText = `Skor ${data.skor} berhasil disimpan!`;
-        saveStatusElement.classList.remove('text-yellow-600');
-        saveStatusElement.classList.add('text-green-600');
-    })
-    .catch(error => {
-        // GAGAL
-        console.error('Error saat menyimpan skor:', error);
-        saveStatusElement.innerText = `Gagal menyimpan skor. Error: ${error.message}`;
-        saveStatusElement.classList.remove('text-yellow-600');
-        saveStatusElement.classList.add('text-red-600');
-    })
-    .finally(() => {
-        // Aktifkan tombol kembali setelah proses selesai (sukses atau gagal)
-        backButton.disabled = false;
-    });
+    } catch (error) {
+        console.error('Error:', error);
+        if (saveStatusElement) {
+            saveStatusElement.innerText = 'Gagal menyimpan skor.';
+            saveStatusElement.classList.remove('text-yellow-600');
+            saveStatusElement.classList.add('text-red-600');
+        }
+    } finally {
+        if (backButton) backButton.disabled = false;
+    }
 }

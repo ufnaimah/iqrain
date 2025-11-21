@@ -85,13 +85,15 @@ class DatabaseSeeder extends Seeder
         foreach ($scores as $index => $score) {
             $murid = $allMurids->get($score->murid_id);
             
-            Leaderboard::create([
-                'murid_id' => $score->murid_id,
-                'mentor_id' => $murid ? $murid->mentor_id : null, // Aman, tetap null jika tidak ada
-                'total_poin_semua_game' => $score->total_skor,
-                'ranking_global' => $index + 1, // $index mulai dari 0
-                'ranking_mentor' => null, // Kita biarkan null dulu
-            ]);
+           Leaderboard::updateOrCreate(
+                    ['murid_id' => $score->murid_id], // Kunci pengecekan
+                    [
+                        'mentor_id' => $murid->mentor_id,
+                        'total_poin_semua_game' => $score->total_skor,
+                        'ranking_global' => $index + 1, 
+                        'ranking_mentor' => 0, 
+                    ]
+                );
         }
     }
 }

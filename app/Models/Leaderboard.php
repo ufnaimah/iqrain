@@ -44,4 +44,37 @@ class Leaderboard extends Model
     {
         return $query->orderBy('ranking_global')->limit($limit);
     }
+
+     public static function refreshAllRankings()
+    {
+        // 1. Hitung Ulang Ranking GLOBAL
+        $globalLeaderboards = self::orderByDesc('total_poin_semua_game')->get();
+        
+        foreach ($globalLeaderboards as $index => $leaderboard) {
+            // Update ranking_global (1, 2, 3...)
+            // Kita pakai where agar spesifik update baris ini saja
+            self::where('leaderboard_id', $leaderboard->leaderboard_id)
+                ->update(['ranking_global' => $index + 1]);
+        }
+
+        // 2. Hitung Ulang Ranking MENTOR
+        // Ambil semua ID mentor yang ada di tabel leaderboard
+        $mentorIds = self::whereNotNull('mentor_id')
+            ->distinct()
+            ->pluck('mentor_id');
+
+        foreach ($mentorIds as $mentorId) {
+            // Ambil murid-murid milik mentor ini, urutkan skor tertinggi
+            $mentorGroup = self::where('mentor_id', $mentorId)
+                ->orderByDesc('total_poin_semua_game')
+                ->get();
+            
+            // Update ranking_mentor mereka (1, 2, 3...)
+            foreach ($mentorGroup as $index => $lb) {
+                self::where('leaderboard_id', $lb->leaderboard_id)
+                    ->update(['ranking_mentor' => $index + 1]);
+            }
+        }
+    }
+
 }

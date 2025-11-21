@@ -34,14 +34,11 @@ class GameController extends Controller
     public function tracing($tingkatan_id)
     {
         $tingkatan = TingkatanIqra::with('materiPembelajarans')->findOrFail($tingkatan_id);
-        $gameStatic = GameStatic::where('tingkatan_id', $tingkatan_id)
-            ->whereHas('jenisGame', function ($q) {
-                $q->where('nama_game', 'Tracking');
-            })->first();
+        $jenisGame = JenisGame::where('nama_game', 'Tracking')->firstOrFail();
 
         $materiPembelajarans = $tingkatan->materiPembelajarans;
 
-        return view('pages.murid.games.tracing', compact('tingkatan', 'materiPembelajarans', 'gameStatic'));
+        return view('pages.murid.games.tracing', compact('tingkatan', 'materiPembelajarans', 'jenisGame'));
     }
 
     public function tracingStandalone(){
@@ -220,9 +217,8 @@ class GameController extends Controller
         return view('pages.murid.games.drag-drop', compact('tingkatan', 'jenisGame'));
     }
 
-    // ==================================================================
-    // FUNGSI SAVE SCORE (UPDATE: Keamanan Max 100 Poin)
-    // ==================================================================
+
+    // ==== Untuk menyimpan nilai  ===
     public function saveScore(Request $request)
     {
         // 1. Validasi Input
@@ -232,106 +228,87 @@ class GameController extends Controller
         ]);
 
         $murid = Auth::user()->murid;
-
-        // 2. Ambil Info Game untuk Cek Poin Maksimal dari Database
-        // Mengambil data JenisGame untuk mengetahui batas maksimal poin (biasanya 100)
+        
         $jenisGame = JenisGame::findOrFail($request->jenis_game_id);
         $poinMaksimal = $jenisGame->poin_maksimal;
+        $finalScore = min($request->skor, $poinMaksimal);
 
-        // 3. Logika Pembatasan Skor (Server-Side Security)
-        // Jika skor yang dikirim user > poin maksimal database, paksa jadi poin maksimal
-        $inputSkor = $request->skor;
+        try {
+            DB::beginTransaction();
 
-        if ($inputSkor > $poinMaksimal) {
-            $finalScore = $poinMaksimal;
-        } else {
-            $finalScore = $inputSkor;
+            $hasilGame = HasilGame::create([
+                'murid_id' => $murid->murid_id,
+                'jenis_game_id' => $request->jenis_game_id,
+                'tingkatan_id' => $request->tingkatan_id ?? null, // Opsional
+                'skor' => $request->skor, // Skor mentah (misal jumlah kartu)
+                'total_poin' => $request->total_poin ?? $finalScore, // Poin yang dihitung
+                'dimainkan_at' => now(),
+                // Tambahan field lain jika ada (waktu_pengerjaan, dll)
+            ]);
+
+            // 2. Update Leaderboard & Hitung Ulang Ranking
+            $this->updateLeaderboardAndRankings($murid->murid_id);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'hasil_game_id' => $hasilGame->hasil_game_id,
+                'poin_didapat' => $finalScore
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();            
+            return response()->json(['success' => false, 'message' => 'Server Error'], 500);
         }
-
-        // 4. Simpan Hasil Game ke Tabel hasil_games
-        $hasilGame = HasilGame::create([
-            'murid_id' => $murid->murid_id,
-            'jenis_game_id' => $request->jenis_game_id,
-            // 'soal_id' => $request->soal_id ?? null,            
-            'skor' => $request->skor,
-            'total_poin' => $request->total_poin,
-            'dimainkan_at' => now(),
-        ]);
-
-        // 5. Update Leaderboard
-        $this->updateLeaderboard($murid->murid_id);
-
-        return response()->json([
-            'success' => true,
-            'hasil_game_id' => $hasilGame->hasil_game_id,
-            'poin_didapat' => $finalScore
-        ]);
     }
 
     // ==================================================================
     // FUNGSI LEADERBOARD (TIDAK BERUBAH)
     // ==================================================================
-    private function updateLeaderboard($murid_id)
+    private function updateLeaderboardAndRankings($murid_id)
     {
+        //Hitung Total Skor Baru si Murid
         $totalPoin = HasilGame::where('murid_id', $murid_id)->sum('total_poin');
         $murid = Murid::find($murid_id);
 
-        $murid = Murid::find($murid_id);
-
-        // Update leaderboard global
+        // Update Tabel Leaderboard (Satu Baris Saja!)
+        // Kita pastikan mentor_id-nya sinkron dengan data murid saat ini.
         Leaderboard::updateOrCreate(
+            ['murid_id' => $murid_id], // Cari berdasarkan murid
             [
-                'murid_id' => $murid_id,
-                'mentor_id' => null,
-            ],
-            [
-                'total_poin_semua_game' => $totalPoin,
-                'ranking_global' => 0, // ✅ INI YANG DITAMBAH
-                'ranking_mentor' => 0, // ✅ INI YANG DITAMBAH
+                'mentor_id' => $murid->mentor_id, 
+                'total_poin_semua_game' => $totalPoin,                
             ]
         );
 
-        // Update leaderboard mentor jika ada
-        if ($murid->mentor_id) {
-            Leaderboard::updateOrCreate(
-                [
-                    'murid_id' => $murid_id,
-                    'mentor_id' => $murid->mentor_id,
-                ],
-                [
-                    'total_poin_semua_game' => $totalPoin,
-                    'ranking_global' => 0, // ✅ INI YANG DITAMBAH
-                'ranking_mentor' => 0, // ✅ INI YANG DITAMBAH
-                ]
-            );
+        // 3. Hitung Ulang Ranking GLOBAL (Semua Murid)
+        // Urutkan semua data berdasarkan skor tertinggi
+        $allLeaderboards = Leaderboard::orderByDesc('total_poin_semua_game')->get();
+        foreach ($allLeaderboards as $index => $lb) {
+            // Kita update ranking_global langsung (1, 2, 3...)
+            // Jangan lupa: where('id') biar efisien
+            Leaderboard::where('leaderboard_id', $lb->leaderboard_id)
+                ->update(['ranking_global' => $index + 1]);
         }
 
-        $this->recalculateRankings();
-    }
-
-    private function recalculateRankings()
-    {
-        // Global
-        $globalLeaderboards = Leaderboard::whereNull('mentor_id')
-            ->orderByDesc('total_poin_semua_game')
-            ->get();
-
-        foreach ($globalLeaderboards as $index => $leaderboard) {
-            $leaderboard->update(['ranking_global' => $index + 1]);
-        }
-
-        // Mentor
-        $mentors = Leaderboard::whereNotNull('mentor_id')
-            ->distinct('mentor_id')
+        // 4. Hitung Ulang Ranking MENTOR (Per Group)
+        // Ambil daftar semua mentor yang ada di tabel leaderboard
+        $mentorIds = Leaderboard::whereNotNull('mentor_id')
+            ->distinct()
             ->pluck('mentor_id');
 
-        foreach ($mentors as $mentor_id) {
-            $mentorLeaderboards = Leaderboard::where('mentor_id', $mentor_id)
+        foreach ($mentorIds as $mentorId) {
+            // Ambil murid-murid milik mentor ini, urutkan skor
+            $mentorGroup = Leaderboard::where('mentor_id', $mentorId)
                 ->orderByDesc('total_poin_semua_game')
                 ->get();
-
-            foreach ($mentorLeaderboards as $index => $leaderboard) {
-                $leaderboard->update(['ranking_mentor' => $index + 1]);
+            
+            foreach ($mentorGroup as $index => $lb) {
+                Leaderboard::updateOrCreate(
+                    ['leaderboard_id' => $lb->leaderboard_id], 
+                    ['ranking_mentor' => $index + 1]          
+                );
             }
         }
     }

@@ -5,7 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Tracing Huruf Hijaiyah - IQRain</title>
+
     <link rel="stylesheet" href="{{ asset('css/game-tracing.css') }}">
+
+    <script>
+        var ASSET_BASE = "{{ asset('') }}";                        
+        var REDIRECT_URL = "{{ route('murid.games.index', $tingkatan->tingkatan_id) }}";
+        
+        // ID Game (Dari $jenisGame)
+        var JENIS_GAME_ID = {{ $jenisGame->jenis_game_id }};
+        var TINGKATAN_ID = {{ $tingkatan->tingkatan_id }};
+        
+        // Data Huruf (Convert PHP Array ke JSON)
+        // Asumsi: materiPembelajarans punya kolom 'huruf_arab' dan 'nama_latin'
+        var ALL_HIJAIYAH_DATA = @json($materiPembelajarans);
+    </script>
+
 </head>
 <body>
     

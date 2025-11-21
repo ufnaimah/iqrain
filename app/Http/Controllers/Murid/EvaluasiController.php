@@ -16,33 +16,48 @@ class EvaluasiController extends Controller
     {
         $tingkatan = TingkatanIqra::findOrFail($tingkatan_id);
         $murid = Auth::user()->murid;
+        $leaderboardType = request()->get('type', 'global');
+       
+        $query = Leaderboard::with('murid.user')
+            ->orderBy('total_poin_semua_game', 'desc'); 
+    
+        if ($leaderboardType === 'mentor' && $murid->mentor_id) {            
+             $query->where('mentor_id', $murid->mentor_id);
+        }         
 
-        // Get leaderboard data
-        $leaderboardType = request()->get('type', 'global'); // global or mentor
+        $leaderboards = $query->get();
 
-        if ($leaderboardType === 'mentor' && $murid->mentor_id) {
-            $leaderboards = Leaderboard::with('murid.user')
-                ->where('mentor_id', $murid->mentor_id)
-                ->whereNotNull('ranking_mentor')
-                ->orderBy('ranking_mentor')
-                ->get();
+        foreach ($leaderboards as $index => $board) {
+            $rankBaru = $index + 1; 
 
-            $myRanking = Leaderboard::where('murid_id', $murid->murid_id)
-                ->where('mentor_id', $murid->mentor_id)
-                ->first();
-        } else {
-            $leaderboards = Leaderboard::with('murid.user')
-                ->whereNull('mentor_id')
-                ->whereNotNull('ranking_global')
-                ->orderBy('ranking_global')
-                ->get();
-
-            $myRanking = Leaderboard::where('murid_id', $murid->murid_id)
-                ->whereNull('mentor_id')
-                ->first();
+            if ($leaderboardType === 'mentor') {                
+                if ($board->ranking_mentor !== $rankBaru) {
+                    $board->update(['ranking_mentor' => $rankBaru]);
+                }
+            } else {
+                if ($board->ranking_global !== $rankBaru) {
+                    $board->update(['ranking_global' => $rankBaru]);
+                }
+            }
         }
 
-        // Get personal evaluation data
+        $leaderboards = $leaderboards->map(function ($item) use ($leaderboardType) {
+            
+            if ($leaderboardType === 'mentor') {                
+                $item->ranking_display = $item->ranking_mentor;
+            } else {                
+                $item->ranking_display = $item->ranking_global;
+            }
+            
+            return $item;
+        });
+        
+        $myRanking = $leaderboards->firstWhere('murid_id', $murid->murid_id);
+        
+
+        // ============================================================
+        // EVALUASI 
+        // ============================================================
         $jenisGames = JenisGame::all();
         $evaluasiData = [];
 
@@ -105,30 +120,31 @@ class EvaluasiController extends Controller
         ));
     }
 
-    public function leaderboard($tingkatan_id)
-    {
-        $tingkatan = TingkatanIqra::findOrFail($tingkatan_id);
-        $murid = Auth::user()->murid;
 
-        $type = request()->get('type', 'global');
+    // public function leaderboard($tingkatan_id)
+    // {
+    //     $tingkatan = TingkatanIqra::findOrFail($tingkatan_id);
+    //     $murid = Auth::user()->murid;
 
-        if ($type === 'mentor' && $murid->mentor_id) {
-            $leaderboards = Leaderboard::with('murid.user')
-                ->where('mentor_id', $murid->mentor_id)
-                ->whereNotNull('ranking_mentor')
-                ->orderBy('ranking_mentor')
-                ->get();
-        } else {
-            $leaderboards = Leaderboard::with('murid.user')
-                ->whereNull('mentor_id')
-                ->whereNotNull('ranking_global')
-                ->orderBy('ranking_global')
-                ->get();
-        }
+    //     $type = request()->get('type', 'global');
 
-        return response()->json([
-            'leaderboards' => $leaderboards,
-            'type' => $type
-        ]);
-    }
+    //     if ($type === 'mentor' && $murid->mentor_id) {
+    //         $leaderboards = Leaderboard::with('murid.user')
+    //             ->where('mentor_id', $murid->mentor_id)
+    //             ->whereNotNull('ranking_mentor')
+    //             ->orderBy('ranking_mentor')
+    //             ->get();
+    //     } else {
+    //         $leaderboards = Leaderboard::with('murid.user')
+    //             ->whereNull('mentor_id')
+    //             ->whereNotNull('ranking_global')
+    //             ->orderBy('ranking_global')
+    //             ->get();
+    //     }
+
+    //     return response()->json([
+    //         'leaderboards' => $leaderboards,
+    //         'type' => $type
+    //     ]);
+    // }
 }

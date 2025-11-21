@@ -21,27 +21,8 @@ class Murid extends Model
     protected $casts = [
         'preferensi_terisi' => 'boolean',
     ];
-
-    // Boot method untuk auto delete related data
-    protected static function boot()
-    {
-        parent::boot();
-
-        static::deleting(function ($murid) {
-            // Delete related data
-            $murid->hasilGames()->delete();
-            $murid->progressModuls()->delete();
-            $murid->leaderboards()->delete();
-            $murid->preferensiPertanyaan()->delete();
-            $murid->permintaanBimbingans()->delete();
-
-            // Delete user account
-            if ($murid->user) {
-                $murid->user->delete();
-            }
-        });
-    }
-
+    
+    
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id', 'user_id');
@@ -106,5 +87,55 @@ class Murid extends Model
     public function scopePreferensiKosong($query)
     {
         return $query->where('preferensi_terisi', false);
+    } 
+
+    protected static function booted()
+    {
+        // 1. SAAT MURID BARU DAFTAR (Created)
+        static::created(function ($murid) {
+            
+            // A. Buatkan data Leaderboard awal
+            Leaderboard::create([
+                'murid_id' => $murid->murid_id,
+                'mentor_id' => $murid->mentor_id, // Ikut data murid (bisa null/terisi)
+                'total_poin_semua_game' => 0,     // Poin awal 0
+                'ranking_global' => 0,            // Sementara 0
+                'ranking_mentor' => 0,            // Sementara 0
+            ]);
+
+            // B. [SOLUSI UTAMA] HITUNG ULANG RANKING SEKARANG JUGA!
+            // Fungsi ini akan mengurutkan semua murid berdasarkan skor.
+            // Karena murid baru skornya 0, dia akan otomatis dikasih nomor urut Paling Bawah (misal: 25).
+            // Jadi rankingnya TIDAK AKAN 0 lagi.
+            Leaderboard::refreshAllRankings();
+        });
+
+        // 2. SAAT MURID MEMILIH/GANTI MENTOR (Updated)
+        static::updated(function ($murid) {
+            if ($murid->isDirty('mentor_id')) {
+                
+                // Update mentor di leaderboard
+                Leaderboard::updateOrCreate(
+                    ['murid_id' => $murid->murid_id], 
+                    ['mentor_id' => $murid->mentor_id]
+                );
+
+                // Hitung ulang lagi, karena dia masuk grup mentor baru
+                Leaderboard::refreshAllRankings();
+            }
+        });
+
+        // 3. SAAT AKUN DIHAPUS (Deleting)
+        static::deleting(function ($murid) {
+            $murid->hasilGames()->delete();
+            $murid->progressModuls()->delete();
+            $murid->leaderboards()->delete();
+            $murid->preferensiPertanyaan()->delete();
+            $murid->permintaanBimbingans()->delete();
+
+            if ($murid->user) {
+                $murid->user->delete();
+            }
+        });
     }
 }
